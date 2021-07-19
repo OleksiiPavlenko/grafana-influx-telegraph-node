@@ -1,0 +1,108 @@
+version: "3"
+services:
+  influxdb:
+    image: influxdb:1.8.6
+    container_name: influxdb
+    ports:
+      - "8083:8083"
+      - "8086:8086"
+      - "8090:8090"
+      - "2003:2003"
+    env_file:
+      - 'env.influxdb'
+    volumes:
+      # Data persistency
+      # sudo mkdir -p /srv/docker/influxdb/data
+      - c:/Users/alexeypa/Docker/influxdbdata/data:/var/lib/influxdb
+    restart: unless-stopped
+
+  telegraf:
+    image: telegraf:latest
+    container_name: telegraf
+    links:
+      - influxdb
+      - mongodb
+      - elasticsearch
+    volumes:
+      - C:/my/projector/docker-influxdb-grafana/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - //var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    env_file:
+      - 'env.grafana'
+    user: "0"
+    links:
+      - influxdb
+    volumes:
+      # Data persistency
+      # sudo mkdir -p /srv/docker/grafana/data; chown 472:472 /srv/docker/grafana/data
+      - c:/Users/alexeypa/Docker/data/data:/var/lib/grafana
+
+  mongodb:
+    image : mongo:4
+    container_name: mongodb
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - c:/Users/alexeypa/Docker/mongo/data/db:/data/db
+    ports:
+    - 27017:27017
+    restart: unless-stopped
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.13.3
+    container_name: es01
+    environment:
+      - node.name=es01
+      - cluster.name=es-docker-cluster
+      - cluster.initial_master_nodes=es01
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+          soft: -1
+          hard: -1
+    volumes:
+      - c:/Users/alexeypa/Docker/elasticsearch/data01:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    links:
+      - app
+    ports:
+      - "80:80"
+    environment:
+      - NGINX_HOST=localhost
+      - NGINX_PORT=80
+    volumes:
+      - c:/Users/alexeypa/Docker/nginx/templates:/etc/nginx/templates
+      - c:/my/projector/docker-influxdb-grafana/config/nginx:/etc/nginx
+    restart: always
+
+  app:
+    build: .
+    command: pm2-dev ./app/server.js
+    environment:
+      NODE_ENV: development
+    links:
+      - mongodb
+      - elasticsearch
+    depends_on:
+      - mongodb
+      - elasticsearch
+    ports:
+      - "5000:5000"
+    volumes:
+      - C:/my/projector/docker-influxdb-grafana:/home/nodejs/app
+      - C:/my/projector/docker-influxdb-grafana/node_modules:/home/nodejs/node_modules
+    restart: always
+
